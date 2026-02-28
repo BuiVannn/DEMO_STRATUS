@@ -135,14 +135,46 @@ def proxy_gateway_health():
 
 @app.route("/proxy/gateway/products", methods=["GET"])
 def proxy_gateway_products():
-    """Proxy: gateway → product service (qua nginx)"""
-    return _proxy_request(f"{INTERNAL_URLS['api-gateway']}/api/products")
+    """Proxy: thử qua gateway, fallback trực tiếp product-service"""
+    url = f"{INTERNAL_URLS['api-gateway']}/api/products"
+    try:
+        resp = requests.get(url, timeout=5)
+        if resp.status_code < 500:
+            try:
+                return jsonify(resp.json()), resp.status_code
+            except ValueError:
+                pass
+    except Exception:
+        pass
+    # Fallback: gọi trực tiếp
+    fallback_url = f"{INTERNAL_URLS['product-service']}/products"
+    return _proxy_request(fallback_url)
 
 
 @app.route("/proxy/gateway/orders", methods=["GET", "POST"])
 def proxy_gateway_orders():
-    """Proxy: gateway → order service (qua nginx)"""
-    return _proxy_request(f"{INTERNAL_URLS['api-gateway']}/api/orders")
+    """Proxy: thử qua gateway, fallback trực tiếp order-service"""
+    url = f"{INTERNAL_URLS['api-gateway']}/api/orders"
+    try:
+        if request.method == "GET":
+            resp = requests.get(url, timeout=5)
+        else:
+            resp = requests.post(
+                url,
+                json=request.get_json(silent=True),
+                headers={"Content-Type": "application/json"},
+                timeout=5,
+            )
+        if resp.status_code < 500:
+            try:
+                return jsonify(resp.json()), resp.status_code
+            except ValueError:
+                pass
+    except Exception:
+        pass
+    # Fallback
+    fallback_url = f"{INTERNAL_URLS['order-service']}/orders"
+    return _proxy_request(fallback_url)
 
 
 # --- Order Service direct proxy ---

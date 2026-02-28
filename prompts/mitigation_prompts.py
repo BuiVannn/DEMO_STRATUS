@@ -13,12 +13,21 @@ API Gateway routing:
 - /api/products → product-service
 - /api/payments → payment-service
 
-Quy tắc:
+YÊU CẦU BẮT BUỘC:
 - Chỉ xuất ra NỘI DUNG FILE CONFIG, không markdown, không giải thích
 - Config phải là nginx.conf hoàn chỉnh (bao gồm worker_processes, events, http blocks)
 - Nginx phải listen port 80
 - Phải có stub_status tại /nginx_status
-- Phải có proxy_set_header cho X-Real-IP và X-Forwarded-For"""
+- Phải có proxy_set_header cho X-Real-IP và X-Forwarded-For
+- PHẢI có: resolver 127.0.0.11 valid=5s ipv6=off; trong http block
+- KHÔNG sử dụng upstream block (vì DNS cache issue trong Docker)
+- Thay vào đó, PHẢI dùng set $variable trong mỗi location để force DNS re-resolve:
+  Ví dụ:
+    location /api/orders {{
+        set $order_upstream http://order-service:5001;
+        proxy_pass $order_upstream/orders;
+    }}
+- PHẢI có location = /health trả về JSON: {{"status":"healthy","service":"api-gateway","type":"nginx"}}"""
 
 MITIGATION_HUMAN_PROMPT = """Lỗi hiện tại: {error_description}
 

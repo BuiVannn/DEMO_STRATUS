@@ -42,7 +42,38 @@ PRODUCT_SERVICE_URL = os.getenv("PRODUCT_SERVICE_URL", "http://product-service:5
 PAYMENT_SERVICE_URL = os.getenv("PAYMENT_SERVICE_URL", "http://payment-service:5003")
 
 # --- In-memory Order Database ---
-ORDERS = {}
+ORDERS = {
+    "ORD-SEED0001": {
+        "order_id": "ORD-SEED0001",
+        "product_id": "P001",
+        "qty": 1,
+        "customer_name": "Nguyễn Văn A",
+        "total_amount": 25000000,
+        "txn_id": "TXN-SEED0001",
+        "status": "confirmed",
+        "created_at": "2026-02-28 10:30:00",
+    },
+    "ORD-SEED0002": {
+        "order_id": "ORD-SEED0002",
+        "product_id": "P002",
+        "qty": 2,
+        "customer_name": "Trần Thị B",
+        "total_amount": 60000000,
+        "txn_id": "TXN-SEED0002",
+        "status": "confirmed",
+        "created_at": "2026-02-28 14:15:00",
+    },
+    "ORD-SEED0003": {
+        "order_id": "ORD-SEED0003",
+        "product_id": "P003",
+        "qty": 3,
+        "customer_name": "Lê Hoàng C",
+        "total_amount": 18000000,
+        "txn_id": "TXN-SEED0003",
+        "status": "confirmed",
+        "created_at": "2026-03-01 09:00:00",
+    },
+}
 
 
 @app.route("/health", methods=["GET"])
@@ -76,10 +107,50 @@ def metrics():
 @app.route("/orders", methods=["GET"])
 def list_orders():
     start = time.time()
+    
+    # Filtering
+    status_filter = request.args.get("status")
+    customer = request.args.get("customer", "").lower()
+    
+    orders = list(ORDERS.values())
+    if status_filter:
+        orders = [o for o in orders if o["status"] == status_filter]
+    if customer:
+        orders = [o for o in orders if customer in o.get("customer_name", "").lower()]
+    
+    # Sort by created_at descending (newest first)
+    orders.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    
     REQUEST_COUNT.labels(method="GET", endpoint="/orders", status="200").inc()
     REQUEST_LATENCY.labels(endpoint="/orders").observe(time.time() - start)
-    return jsonify({"orders": list(ORDERS.values())}), 200
+    return jsonify({
+        "orders": orders,
+        "total": len(orders),
+    }), 200
 
+@app.route("/orders/stats", methods=["GET"])
+def order_stats():
+    """Thống kê đơn hàng — dashboard hiển thị hoặc agent phân tích"""
+    total = len(ORDERS)
+    confirmed = sum(1 for o in ORDERS.values() if o["status"] == "confirmed")
+    failed = sum(1 for o in ORDERS.values() if o["status"] == "failed")
+    total_revenue = sum(o.get("total_amount", 0) for o in ORDERS.values() if o["status"] == "confirmed")
+    
+    return jsonify({
+        "total_orders": total,
+        "confirmed": confirmed,
+        "failed": failed,
+        "total_revenue": total_revenue,
+        "success_rate": round(confirmed / max(total, 1) * 100, 1),
+    }), 200
+
+@app.route("/orders/<order_id>", methods=["GET"])
+def get_order(order_id):
+    """Chi tiết 1 đơn hàng"""
+    order = ORDERS.get(order_id)
+    if not order:
+        return jsonify({"error": f"Order {order_id} not found"}), 404
+    return jsonify(order), 200
 
 @app.route("/orders", methods=["POST"])
 def create_order():

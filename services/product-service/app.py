@@ -34,10 +34,14 @@ REQUEST_LATENCY = Histogram("product_request_duration_seconds", "Request latency
 
 # --- In-memory Product Database ---
 PRODUCTS = {
-    "P001": {"id": "P001", "name": "Laptop Dell XPS 15", "price": 25000000, "stock": 10},
-    "P002": {"id": "P002", "name": "iPhone 16 Pro", "price": 30000000, "stock": 5},
-    "P003": {"id": "P003", "name": "AirPods Pro 3", "price": 6000000, "stock": 20},
-    "P004": {"id": "P004", "name": "Samsung Galaxy S25", "price": 22000000, "stock": 8},
+    "P001": {"id": "P001", "name": "Laptop Dell XPS 15", "price": 25000000, "stock": 10, "category": "electronics", "image": "💻"},
+    "P002": {"id": "P002", "name": "iPhone 16 Pro", "price": 30000000, "stock": 5, "category": "electronics", "image": "📱"},
+    "P003": {"id": "P003", "name": "AirPods Pro 3", "price": 6000000, "stock": 20, "category": "accessories", "image": "🎧"},
+    "P004": {"id": "P004", "name": "Samsung Galaxy S25", "price": 22000000, "stock": 8, "category": "electronics", "image": "📱"},
+    "P005": {"id": "P005", "name": "MacBook Air M4", "price": 32000000, "stock": 3, "category": "electronics", "image": "💻"},
+    "P006": {"id": "P006", "name": "Bàn phím Keychron K8", "price": 2500000, "stock": 15, "category": "accessories", "image": "⌨️"},
+    "P007": {"id": "P007", "name": "Màn hình LG 27'' 4K", "price": 8000000, "stock": 7, "category": "electronics", "image": "🖥️"},
+    "P008": {"id": "P008", "name": "Chuột Logitech MX Master", "price": 2000000, "stock": 12, "category": "accessories", "image": "🖱️"},
 }
 
 
@@ -54,11 +58,52 @@ def metrics():
 @app.route("/products", methods=["GET"])
 def list_products():
     start = time.time()
-    logger.info("Listing all products")
+    
+    # Query params cho filtering & search
+    category = request.args.get("category")
+    search = request.args.get("search", "").lower()
+    in_stock = request.args.get("in_stock")  # "true" để chỉ lấy còn hàng
+    
+    filtered = list(PRODUCTS.values())
+    
+    if category:
+        filtered = [p for p in filtered if p["category"] == category]
+    if search:
+        filtered = [p for p in filtered if search in p["name"].lower()]
+    if in_stock == "true":
+        filtered = [p for p in filtered if p["stock"] > 0]
+    
+    logger.info(f"Listing products: {len(filtered)} results (category={category}, search={search})")
     REQUEST_COUNT.labels(method="GET", endpoint="/products", status="200").inc()
     REQUEST_LATENCY.labels(endpoint="/products").observe(time.time() - start)
-    return jsonify({"products": list(PRODUCTS.values())}), 200
+    
+    return jsonify({
+        "products": filtered,
+        "total": len(filtered),
+        "filters": {"category": category, "search": search or None, "in_stock": in_stock},
+    }), 200
 
+@app.route("/products/categories", methods=["GET"])
+def list_categories():
+    """Danh sách categories — hữu ích cho demo UI"""
+    categories = list(set(p["category"] for p in PRODUCTS.values()))
+    return jsonify({"categories": categories}), 200
+
+@app.route("/products/stats", methods=["GET"])
+def product_stats():
+    """Thống kê tồn kho — agent có thể dùng để phát hiện anomaly"""
+    total_products = len(PRODUCTS)
+    total_stock = sum(p["stock"] for p in PRODUCTS.values())
+    out_of_stock = sum(1 for p in PRODUCTS.values() if p["stock"] == 0)
+    total_value = sum(p["price"] * p["stock"] for p in PRODUCTS.values())
+    
+    return jsonify({
+        "total_products": total_products,
+        "total_stock_units": total_stock,
+        "out_of_stock_count": out_of_stock,
+        "total_inventory_value": total_value,
+        "avg_price": round(sum(p["price"] for p in PRODUCTS.values()) / total_products),
+    }), 200
 
 @app.route("/products/<product_id>", methods=["GET"])
 def get_product(product_id):

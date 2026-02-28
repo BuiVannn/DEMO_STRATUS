@@ -26,7 +26,11 @@ scrape_configs:
       - targets: ["cadvisor:8080"]
     metrics_path: /metrics
 
+  # - job_name: "nginx"
+  #   static_configs:
+  #     - targets: ["api-gateway:80"]
+  #   metrics_path: /nginx_status
   - job_name: "nginx"
     static_configs:
-      - targets: ["api-gateway:80"]
-    metrics_path: /nginx_status
+      - targets: ["nginx-exporter:9113"]
+    metrics_path: /metrics

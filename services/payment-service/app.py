@@ -39,7 +39,32 @@ SIMULATE_DELAY = float(os.getenv("SIMULATE_DELAY", "0"))  # seconds
 SIMULATE_FAILURE = os.getenv("SIMULATE_FAILURE", "false").lower() == "true"
 
 # --- In-memory Transaction Log ---
-TRANSACTIONS = {}
+TRANSACTIONS = {
+    "TXN-SEED0001": {
+        "txn_id": "TXN-SEED0001",
+        "order_id": "ORD-SEED0001",
+        "amount": 25000000,
+        "customer_name": "Nguyễn Văn A",
+        "status": "success",
+        "processed_at": "2026-02-28 10:30:05",
+    },
+    "TXN-SEED0002": {
+        "txn_id": "TXN-SEED0002",
+        "order_id": "ORD-SEED0002",
+        "amount": 60000000,
+        "customer_name": "Trần Thị B",
+        "status": "success",
+        "processed_at": "2026-02-28 14:15:12",
+    },
+    "TXN-SEED0003": {
+        "txn_id": "TXN-SEED0003",
+        "order_id": "ORD-SEED0003",
+        "amount": 18000000,
+        "customer_name": "Lê Hoàng C",
+        "status": "success",
+        "processed_at": "2026-03-01 09:00:08",
+    },
+}
 
 
 @app.route("/health", methods=["GET"])
@@ -105,10 +130,46 @@ def process_payment():
 @app.route("/payments", methods=["GET"])
 def list_transactions():
     start = time.time()
+    
+    status_filter = request.args.get("status")
+    txns = list(TRANSACTIONS.values())
+    if status_filter:
+        txns = [t for t in txns if t["status"] == status_filter]
+    
+    txns.sort(key=lambda x: x.get("processed_at", ""), reverse=True)
+    
     REQUEST_COUNT.labels(method="GET", endpoint="/payments", status="200").inc()
     REQUEST_LATENCY.labels(endpoint="/payments").observe(time.time() - start)
-    return jsonify({"transactions": list(TRANSACTIONS.values())}), 200
+    return jsonify({
+        "transactions": txns,
+        "total": len(txns),
+    }), 200
 
+@app.route("/payments/stats", methods=["GET"])
+def payment_stats():
+    """Thống kê thanh toán"""
+    total = len(TRANSACTIONS)
+    success = sum(1 for t in TRANSACTIONS.values() if t["status"] == "success")
+    failed = sum(1 for t in TRANSACTIONS.values() if t["status"] != "success")
+    total_amount = sum(t.get("amount", 0) for t in TRANSACTIONS.values() if t["status"] == "success")
+    
+    return jsonify({
+        "total_transactions": total,
+        "success": success,
+        "failed": failed,
+        "total_amount_processed": total_amount,
+        "success_rate": round(success / max(total, 1) * 100, 1),
+        "simulate_delay": SIMULATE_DELAY,
+        "simulate_failure": SIMULATE_FAILURE,
+    }), 200
+
+@app.route("/payments/<txn_id>", methods=["GET"])
+def get_transaction(txn_id):
+    """Chi tiết 1 transaction"""
+    txn = TRANSACTIONS.get(txn_id)
+    if not txn:
+        return jsonify({"error": f"Transaction {txn_id} not found"}), 404
+    return jsonify(txn), 200
 
 if __name__ == "__main__":
     logger.info("Payment Service starting on port 5003")

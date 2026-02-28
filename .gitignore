@@ -12,3 +12,6 @@ __pycache__/
 .DS_Store
 *.egg-info/
 *.bak
+basic_graph.py
+logic_graph.py
+main.py

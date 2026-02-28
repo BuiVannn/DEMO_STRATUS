@@ -12,7 +12,7 @@ import subprocess
 client = docker.from_env()
 
 
-def scenario_1_bad_nginx_config():
+def scenario_1_bad_nginx_config_0():
     """
     Scenario 1: Sai config Nginx API Gateway
     → Gây 502 Bad Gateway cho tất cả requests
@@ -79,6 +79,83 @@ http {
     print("   🧪 Test: curl http://localhost/api/products → sẽ trả về 502")
     print("\n   Bây giờ chạy: python main_v2.py")
 
+def scenario_1_bad_nginx_config():
+    """
+    Scenario 1: Sai config Nginx API Gateway
+    → Gây 502 Bad Gateway cho tất cả requests
+    → Agent cần: phân tích logs → tạo config đúng → apply
+    """
+    print("\n🔥 Scenario 1: Injecting BAD Nginx config...")
+    print("   Hệ thống sẽ trả về 502 Bad Gateway\n")
+
+    bad_config = """
+worker_processes auto;
+events {
+    worker_connections 1024;
+}
+http {
+    resolver 127.0.0.11 valid=5s ipv6=off;
+
+    server {
+        listen 80 default_server;
+        server_name localhost;
+
+        location = /health {
+            add_header Content-Type application/json;
+            return 200 '{"status":"healthy","service":"api-gateway","type":"nginx"}';
+        }
+
+        location /api/orders {
+            set $order_upstream http://order-service:9999;
+            proxy_pass $order_upstream/orders;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_connect_timeout 3s;
+            proxy_read_timeout 3s;
+        }
+        location /api/products {
+            set $product_upstream http://product-service:9999;
+            proxy_pass $product_upstream/products;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_connect_timeout 3s;
+            proxy_read_timeout 3s;
+        }
+        location /api/payments {
+            set $payment_upstream http://payment-service:9999;
+            proxy_pass $payment_upstream/payments;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_connect_timeout 3s;
+            proxy_read_timeout 3s;
+        }
+        location /nginx_status {
+            stub_status on;
+            allow all;
+        }
+        location / {
+            add_header Content-Type application/json;
+            return 200 '{"service":"api-gateway","routes":["/api/orders","/api/products","/api/payments"]}';
+        }
+    }
+}
+"""
+    container = client.containers.get("api-gateway")
+
+    # Backup trước
+    container.exec_run("cp /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak")
+
+    # Ghi config lỗi
+    b64 = base64.b64encode(bad_config.encode("utf-8")).decode("utf-8")
+    container.exec_run(f"sh -c 'echo {b64} | base64 -d > /etc/nginx/nginx.conf'")
+    container.exec_run("nginx -s reload")
+
+    print("   ✅ Đã inject lỗi! Nginx đang trỏ sai port (9999 thay vì 500x)")
+    print("   🧪 Test: curl http://localhost/api/products → sẽ trả về 502")
+    print("\n   Bây giờ chạy: python main_v2.py")
 
 def scenario_2_payment_service_crash():
     """

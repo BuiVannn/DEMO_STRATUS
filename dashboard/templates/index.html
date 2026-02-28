@@ -461,7 +461,7 @@
         var SVC_INFO = {
             'api-gateway': {
                 title: '🌐 Nginx API Gateway (:80)',
-                desc: 'Reverse proxy — route requests tới 3 microservices. Là điểm vào duy nhất của hệ thống. Khi lỗi, toàn bộ traffic bị chặn.',
+                desc: 'Reverse proxy — route requests tới 3 microservices. Là điểm vào duy nhất của hệ thống.',
                 apis: [
                     { method: 'GET', path: '/proxy/gateway/products', label: 'List products (via gateway)' },
                     { method: 'GET', path: '/proxy/gateway/orders', label: 'List orders (via gateway)' },
@@ -470,19 +470,25 @@
             },
             'order-service': {
                 title: '📦 Order Service (:5001) — Orchestrator',
-                desc: 'Quản lý đơn hàng. Orchestration: gọi Product Service kiểm kho → Payment Service thanh toán → Reserve stock. Có OpenTelemetry traces.',
+                desc: 'Quản lý đơn hàng. Orchestration: Product → Payment → Reserve. Có seed data 3 đơn hàng mẫu.',
                 apis: [
                     { method: 'GET', path: '/proxy/order-service/orders', label: 'List orders' },
+                    { method: 'GET', path: '/proxy/order-service/orders/stats', label: '📊 Order stats' },
+                    { method: 'GET', path: '/proxy/order-service/orders/ORD-SEED0001', label: 'Order detail (seed)' },
                     { method: 'GET', path: '/proxy/order-service/health', label: 'Health + deps' },
-                    { method: 'POST', path: '/proxy/order-service/orders', label: 'Create order',
+                    { method: 'POST', path: '/proxy/order-service/orders', label: '🛒 Create order',
                       body: { product_id: 'P001', qty: 1, customer_name: 'Demo User' }},
                 ]
             },
             'product-service': {
                 title: '🏷️ Product Service (:5002)',
-                desc: 'Quản lý catalog sản phẩm & tồn kho. Cung cấp check-stock và reserve-stock cho Order Service.',
+                desc: 'Quản lý 8 sản phẩm mẫu & tồn kho. Có filter, search, stats.',
                 apis: [
-                    { method: 'GET', path: '/proxy/product-service/products', label: 'All products' },
+                    { method: 'GET', path: '/proxy/product-service/products', label: 'All products (8 items)' },
+                    { method: 'GET', path: '/proxy/product-service/products?category=electronics', label: 'Filter: electronics' },
+                    { method: 'GET', path: '/proxy/product-service/products?category=accessories', label: 'Filter: accessories' },
+                    { method: 'GET', path: '/proxy/product-service/products/stats', label: '📊 Inventory stats' },
+                    { method: 'GET', path: '/proxy/product-service/products/categories', label: 'Categories' },
                     { method: 'GET', path: '/proxy/product-service/products/P001', label: 'Product P001' },
                     { method: 'GET', path: '/proxy/product-service/products/P001/check-stock?qty=1', label: 'Check stock' },
                     { method: 'GET', path: '/proxy/product-service/health', label: 'Health' },
@@ -490,9 +496,11 @@
             },
             'payment-service': {
                 title: '💳 Payment Service (:5003)',
-                desc: 'Xử lý thanh toán. Hỗ trợ fault injection: SIMULATE_DELAY, SIMULATE_FAILURE qua env vars.',
+                desc: 'Xử lý thanh toán. Có 3 transactions mẫu. Hỗ trợ fault injection qua env vars.',
                 apis: [
                     { method: 'GET', path: '/proxy/payment-service/payments', label: 'List transactions' },
+                    { method: 'GET', path: '/proxy/payment-service/payments/stats', label: '📊 Payment stats' },
+                    { method: 'GET', path: '/proxy/payment-service/payments/TXN-SEED0001', label: 'Transaction detail' },
                     { method: 'GET', path: '/proxy/payment-service/health', label: 'Health' },
                 ]
             },
