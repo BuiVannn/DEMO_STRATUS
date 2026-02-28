@@ -1,0 +1,32 @@
+# Prometheus Configuration
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # --- Business Services ---
+  - job_name: "order-service"
+    static_configs:
+      - targets: ["order-service:5001"]
+    metrics_path: /metrics
+
+  - job_name: "product-service"
+    static_configs:
+      - targets: ["product-service:5002"]
+    metrics_path: /metrics
+
+  - job_name: "payment-service"
+    static_configs:
+      - targets: ["payment-service:5003"]
+    metrics_path: /metrics
+
+  # --- Infrastructure ---
+  - job_name: "cadvisor"
+    static_configs:
+      - targets: ["cadvisor:8080"]
+    metrics_path: /metrics
+
+  - job_name: "nginx"
+    static_configs:
+      - targets: ["api-gateway:80"]
+    metrics_path: /nginx_status

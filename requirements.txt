@@ -1,0 +1,10 @@
+langgraph
+langchain
+langchain-openai
+docker
+python-dotenv
+requests
+pydantic
+flask
+flask-socketio
+prometheus-client

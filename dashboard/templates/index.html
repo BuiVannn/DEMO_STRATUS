@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤖 SRE Agent Dashboard — STRATUS Demo</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg-primary: #111827;
+            --bg-secondary: #1f2937;
+            --bg-card: #374151;
+            --bg-card-dark: #1f2937;
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --accent-blue: #3b82f6;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-orange: #f97316;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --accent-yellow: #eab308;
+            --accent-indigo: #6366f1;
+            --accent-violet: #8b5cf6;
+            --border-color: #374151;
+            --border-light: #4b5563;
+        }
+
+        body {
+            font-family: -apple-system, 'Segoe UI', 'Inter', system-ui, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* === HEADER === */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 10px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 52px;
+        }
+        .header-left { display: flex; align-items: center; gap: 12px; }
+        .header-left h1 { font-size: 17px; font-weight: 700; }
+        .header-badge { font-size: 10px; background: var(--accent-blue); color: white; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+        .header-right { display: flex; align-items: center; gap: 12px; }
+        .clock { color: var(--text-secondary); font-size: 13px; font-family: 'Consolas', monospace; }
+        .btn-launch {
+            background: var(--accent-red); color: white; border: none;
+            padding: 7px 14px; border-radius: 6px; font-weight: 700;
+            font-size: 12px; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-launch:hover { background: #dc2626; }
+        .btn-launch:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-test {
+            background: var(--accent-blue); color: white; border: none;
+            padding: 6px 12px; border-radius: 5px; font-weight: 600;
+            font-size: 11px; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-test:hover { background: #2563eb; }
+        .btn-test-sm {
+            background: var(--accent-indigo); color: white; border: none;
+            padding: 2px 8px; border-radius: 3px; font-size: 9px;
+            cursor: pointer; font-weight: 600; margin-left: auto;
+        }
+        .btn-test-sm:hover { background: #4f46e5; }
+
+        /* === MAIN LAYOUT === */
+        .main-layout { display: flex; height: calc(100vh - 52px); }
+
+        /* === LEFT PANEL === */
+        .left-panel {
+            width: 280px; background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            padding: 14px; display: flex; flex-direction: column;
+            flex-shrink: 0; overflow-y: auto;
+        }
+        .panel-title {
+            font-size: 11px; font-weight: 700; color: var(--text-secondary);
+            text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;
+        }
+        .topology {
+            display: flex; flex-direction: column;
+            align-items: center; gap: 6px;
+        }
+        .svc-box {
+            padding: 10px; border-radius: 8px;
+            border: 2px solid var(--border-light); background: var(--bg-card);
+            text-align: center; transition: all 0.3s; width: 200px; cursor: pointer;
+        }
+        .svc-box:hover { transform: scale(1.02); }
+        .svc-box.healthy { border-color: var(--accent-green); }
+        .svc-box.unhealthy { border-color: var(--accent-yellow); }
+        .svc-box.down { border-color: var(--accent-red); }
+        .svc-box-icon { font-size: 18px; }
+        .svc-box-name { font-size: 11px; font-weight: 700; margin-top: 3px; }
+        .svc-box-status { font-size: 9px; margin-top: 3px; color: var(--text-secondary); }
+        .topology-connector { color: var(--text-muted); font-size: 11px; line-height: 1.2; text-align: center; }
+        .svc-row { display: flex; gap: 6px; width: 100%; }
+        .svc-small {
+            flex: 1; padding: 7px 4px; border-radius: 6px;
+            border: 1px solid var(--border-light); background: var(--bg-card);
+            text-align: center; transition: all 0.3s; cursor: pointer;
+        }
+        .svc-small:hover { transform: scale(1.03); }
+        .svc-small.healthy { border-color: var(--accent-green); }
+        .svc-small.unhealthy { border-color: var(--accent-yellow); }
+        .svc-small.down { border-color: var(--accent-red); }
+        .svc-small-icon { font-size: 13px; }
+        .svc-small-name { font-size: 9px; font-weight: 700; margin-top: 2px; }
+        .svc-small-status { font-size: 8px; margin-top: 1px; color: var(--text-secondary); }
+
+        /* Service Detail */
+        .svc-detail {
+            margin-top: 12px; padding-top: 12px;
+            border-top: 1px solid var(--border-color);
+        }
+        .svc-detail-title { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+        .svc-detail-desc { font-size: 10px; color: var(--text-secondary); margin-bottom: 8px; line-height: 1.5; }
+        .api-list { display: flex; flex-direction: column; gap: 4px; }
+        .api-row {
+            display: flex; align-items: center; gap: 6px;
+            background: var(--bg-card); padding: 5px 8px; border-radius: 4px; font-size: 10px;
+        }
+        .api-method {
+            font-weight: 700; font-size: 9px; padding: 1px 5px;
+            border-radius: 3px; min-width: 34px; text-align: center;
+        }
+        .api-method.get { background: var(--accent-green); color: white; }
+        .api-method.post { background: var(--accent-blue); color: white; }
+        .api-path { color: var(--text-primary); font-family: monospace; font-size: 10px; }
+        .api-result {
+            margin-top: 6px; background: #0d1117; padding: 8px;
+            border-radius: 4px; font-family: monospace; font-size: 9px;
+            color: var(--accent-green); max-height: 150px; overflow-y: auto;
+            white-space: pre-wrap; word-break: break-all; display: none;
+            border: 1px solid var(--border-color);
+        }
+
+        /* Observability */
+        .obs-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-color); }
+        .obs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+        .obs-link {
+            display: block; background: var(--bg-card); border-radius: 5px;
+            padding: 6px; text-align: center; text-decoration: none; transition: background 0.2s;
+        }
+        .obs-link:hover { background: var(--border-light); }
+        .obs-link-label { font-size: 9px; color: var(--text-secondary); }
+        .obs-link-port { font-size: 12px; font-weight: 700; }
+        .obs-link-port.prometheus { color: var(--accent-orange); }
+        .obs-link-port.jaeger { color: var(--accent-cyan); }
+
+        /* === CENTER PANEL === */
+        .center-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* Pipeline */
+        .pipeline-bar {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color); padding: 14px;
+        }
+        .pipeline-row {
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+        }
+        .phase-box {
+            padding: 10px 14px; border-radius: 8px; text-align: center;
+            min-width: 110px; transition: all 0.5s;
+            background: var(--bg-card); color: var(--text-muted);
+        }
+        .phase-icon { font-size: 16px; }
+        .phase-name { font-size: 10px; font-weight: 700; margin-top: 3px; }
+        .phase-desc { font-size: 8px; opacity: 0.7; margin-top: 2px; }
+        .phase-box.active {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            color: white; transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(59,130,246,0.3);
+        }
+        .phase-box.done { background: var(--accent-green); color: white; }
+        .phase-box.error { background: var(--accent-red); color: white; }
+        .phase-arrow { color: var(--text-muted); font-size: 16px; }
+
+        /* Content area */
+        .content-area { flex: 1; display: flex; overflow: hidden; }
+
+        /* Timeline */
+        .timeline-panel { flex: 1; padding: 14px; overflow-y: auto; }
+        .timeline-list { display: flex; flex-direction: column; gap: 6px; }
+        .timeline-placeholder { color: var(--text-muted); font-size: 13px; font-style: italic; }
+        .timeline-event {
+            border-left: 3px solid var(--border-light);
+            padding: 7px 10px; border-radius: 0 6px 6px 0;
+            background: rgba(255,255,255,0.02); font-size: 12px;
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        .timeline-meta {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 9px; color: var(--text-secondary); margin-bottom: 3px;
+        }
+        .timeline-tag { background: var(--bg-card); padding: 1px 5px; border-radius: 3px; font-size: 9px; }
+        .timeline-action { line-height: 1.5; white-space: pre-wrap; }
+
+        /* Timeline event colors */
+        .te-action { border-left-color: var(--accent-blue); background: rgba(59,130,246,0.05); }
+        .te-telemetry { border-left-color: var(--accent-cyan); background: rgba(6,182,212,0.05); }
+        .te-conclusion { border-left-color: var(--accent-green); background: rgba(34,197,94,0.05); }
+        .te-reasoning { border-left-color: var(--accent-purple); background: rgba(139,92,246,0.05); }
+        .te-lock_acquired { border-left-color: var(--accent-orange); background: rgba(249,115,22,0.05); }
+        .te-lock_released { border-left-color: var(--text-muted); background: rgba(107,114,128,0.05); }
+        .te-tnr_backup { border-left-color: var(--accent-cyan); background: rgba(6,182,212,0.05); }
+        .te-tnr_apply { border-left-color: var(--accent-indigo); background: rgba(99,102,241,0.05); }
+        .te-tnr_commit { border-left-color: var(--accent-green); background: rgba(34,197,94,0.08); }
+        .te-tnr_rollback { border-left-color: var(--accent-red); background: rgba(239,68,68,0.08); }
+        .te-oracle { border-left-color: var(--accent-violet); background: rgba(139,92,246,0.05); }
+        .te-circuit_breaker { border-left-color: var(--accent-red); background: rgba(239,68,68,0.1); }
+
+        @keyframes pulseRed {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+            70% { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
+        }
+        .pulse-red { animation: pulseRed 1s infinite; }
+
+        /* === RIGHT PANEL === */
+        .right-panel {
+            width: 260px; background: var(--bg-secondary);
+            border-left: 1px solid var(--border-color);
+            padding: 14px; overflow-y: auto; flex-shrink: 0;
+        }
+        .safety-card {
+            background: var(--bg-card); border-radius: 8px;
+            padding: 10px; margin-bottom: 10px;
+        }
+        .safety-card-header {
+            display: flex; align-items: center;
+            justify-content: space-between; margin-bottom: 6px;
+        }
+        .safety-label { font-size: 10px; font-weight: 700; }
+        .safety-badge {
+            font-size: 9px; padding: 2px 7px; border-radius: 4px; font-weight: 600;
+        }
+        .badge-idle { background: var(--border-light); color: var(--text-secondary); }
+        .badge-backup { background: #0891b2; color: white; }
+        .badge-applying { background: var(--accent-yellow); color: #1f2937; }
+        .badge-committed { background: var(--accent-green); color: white; }
+        .badge-rollback { background: var(--accent-red); color: white; }
+        .safety-desc { font-size: 8px; color: var(--text-muted); }
+        .safety-value { font-size: 9px; color: var(--text-secondary); }
+        .progress-track {
+            width: 100%; height: 6px; background: var(--border-light);
+            border-radius: 3px; overflow: hidden; margin-top: 6px;
+        }
+        .progress-fill {
+            height: 100%; background: var(--accent-blue);
+            border-radius: 3px; transition: all 0.5s;
+        }
+        .progress-fill.danger { background: var(--accent-red); }
+        .undo-item {
+            background: var(--border-light); padding: 3px 6px;
+            border-radius: 3px; font-size: 9px; margin-bottom: 3px;
+        }
+        .oracle-row {
+            display: flex; align-items: center;
+            justify-content: space-between; font-size: 10px; padding: 3px 0;
+        }
+
+        /* Responsive */
+        @media (max-width: 1100px) {
+            .left-panel, .right-panel { width: 240px; }
+            .phase-box { min-width: 90px; padding: 8px 10px; }
+        }
+        @media (max-width: 800px) {
+            .main-layout { flex-direction: column; }
+            .left-panel, .right-panel { width: 100%; height: auto; }
+            .pipeline-row { flex-wrap: wrap; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="header">
+        <div class="header-left">
+            <span style="font-size:22px">🤖</span>
+            <h1>SRE Agent Dashboard</h1>
+            <span class="header-badge">STRATUS-inspired</span>
+        </div>
+        <div class="header-right">
+            <button class="btn-test" onclick="testCreateOrder()">🧪 Test Order</button>
+            <span class="clock" id="clock"></span>
+            <button class="btn-launch" id="btn-start" onclick="startAgent()">🚀 Launch SRE Agent</button>
+        </div>
+    </div>
+
+    <div class="main-layout">
+        <!-- LEFT: Service Topology -->
+        <div class="left-panel">
+            <div class="panel-title">Service Topology</div>
+            <div class="topology">
+                <div class="svc-box gateway" id="svc-api-gateway" onclick="showDetail('api-gateway')">
+                    <div class="svc-box-icon">🌐</div>
+                    <div class="svc-box-name">Nginx Gateway</div>
+                    <div class="svc-box-status" id="svc-api-gateway-status">checking...</div>
+                </div>
+                <div class="topology-connector">│<br>routes to<br>┌────┼────┐</div>
+                <div class="svc-row">
+                    <div class="svc-small" id="svc-order-service" onclick="showDetail('order-service')">
+                        <div class="svc-small-icon">📦</div>
+                        <div class="svc-small-name">Order</div>
+                        <div class="svc-small-status" id="svc-order-service-status">...</div>
+                    </div>
+                    <div class="svc-small" id="svc-product-service" onclick="showDetail('product-service')">
+                        <div class="svc-small-icon">🏷️</div>
+                        <div class="svc-small-name">Product</div>
+                        <div class="svc-small-status" id="svc-product-service-status">...</div>
+                    </div>
+                    <div class="svc-small" id="svc-payment-service" onclick="showDetail('payment-service')">
+                        <div class="svc-small-icon">💳</div>
+                        <div class="svc-small-name">Payment</div>
+                        <div class="svc-small-status" id="svc-payment-service-status">...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Service Detail -->
+            <div class="svc-detail" id="svc-detail-panel">
+                <div class="svc-detail-title" id="detail-title">👆 Click service để xem chi tiết</div>
+                <div class="svc-detail-desc" id="detail-desc"></div>
+                <div class="api-list" id="detail-apis"></div>
+                <div class="api-result" id="api-result"></div>
+            </div>
+
+            <!-- Observability -->
+            <div class="obs-section">
+                <div class="panel-title" style="margin-bottom:6px">Observability</div>
+                <div class="obs-grid">
+                    <a href="http://localhost:9090" target="_blank" class="obs-link">
+                        <div class="obs-link-label">Prometheus</div>
+                        <div class="obs-link-port prometheus">:9090</div>
+                    </a>
+                    <a href="http://localhost:16686" target="_blank" class="obs-link">
+                        <div class="obs-link-label">Jaeger</div>
+                        <div class="obs-link-port jaeger">:16686</div>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- CENTER -->
+        <div class="center-panel">
+            <!-- Pipeline -->
+            <div class="pipeline-bar">
+                <div class="panel-title" style="margin-bottom:10px">Agent Workflow Pipeline</div>
+                <div class="pipeline-row">
+                    <div class="phase-box" id="phase-triage">
+                        <div class="phase-icon">🔍</div>
+                        <div class="phase-name">Triage</div>
+                        <div class="phase-desc">Health+Traces</div>
+                    </div>
+                    <span class="phase-arrow">→</span>
+                    <div class="phase-box" id="phase-planner">
+                        <div class="phase-icon">🧠</div>
+                        <div class="phase-name">Planner</div>
+                        <div class="phase-desc">LLM Reasoning</div>
+                    </div>
+                    <span class="phase-arrow">→</span>
+                    <div class="phase-box" id="phase-mitigation">
+                        <div class="phase-icon">🔧</div>
+                        <div class="phase-name">Mitigation</div>
+                        <div class="phase-desc">TNR+A-Lock</div>
+                    </div>
+                    <span class="phase-arrow">→</span>
+                    <div class="phase-box" id="phase-verification">
+                        <div class="phase-icon">✅</div>
+                        <div class="phase-name">Verification</div>
+                        <div class="phase-desc">Oracle</div>
+                    </div>
+                    <span class="phase-arrow">↩</span>
+                    <div class="phase-box" id="phase-undo">
+                        <div class="phase-icon">⏪</div>
+                        <div class="phase-name">Undo</div>
+                        <div class="phase-desc">Rollback</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content: Timeline + Safety -->
+            <div class="content-area">
+                <!-- Timeline -->
+                <div class="timeline-panel" id="timeline-container">
+                    <div class="panel-title">🕐 Agent Activity Timeline</div>
+                    <div class="timeline-list" id="timeline">
+                        <div class="timeline-placeholder">Nhấn "Launch SRE Agent" để bắt đầu demo...</div>
+                    </div>
+                </div>
+
+                <!-- RIGHT: Safety Mechanisms -->
+                <div class="right-panel">
+                    <div class="panel-title">🛡️ Safety Mechanisms</div>
+
+                    <div class="safety-card">
+                        <div class="safety-card-header">
+                            <span class="safety-label">TNR Transaction</span>
+                            <span class="safety-badge badge-idle" id="tnr-status">IDLE</span>
+                        </div>
+                        <div class="safety-desc">Backup → Apply → Verify → Commit/Rollback</div>
+                    </div>
+
+                    <div class="safety-card">
+                        <div class="safety-card-header">
+                            <span class="safety-label">A-Lock</span>
+                            <span id="a-lock-status" style="font-size:10px">🔓 Free</span>
+                        </div>
+                        <div class="safety-value" id="a-lock-holder">No agent holding lock</div>
+                    </div>
+
+                    <div class="safety-card">
+                        <div class="safety-card-header">
+                            <span class="safety-label">Bounded Risk Window</span>
+                            <span id="risk-window" style="font-size:10px;font-family:monospace">0/3</span>
+                        </div>
+                        <div class="progress-track">
+                            <div class="progress-fill" id="risk-bar" style="width:0%"></div>
+                        </div>
+                    </div>
+
+                    <div class="safety-card">
+                        <div class="safety-label" style="margin-bottom:6px">Undo Stack</div>
+                        <div id="undo-stack">
+                            <div class="safety-desc" style="font-style:italic">Empty</div>
+                        </div>
+                    </div>
+
+                    <div class="safety-card">
+                        <div class="safety-label" style="margin-bottom:6px">Validation Oracles</div>
+                        <div class="oracle-row"><span>System Health</span><span id="oracle-health">⬜</span></div>
+                        <div class="oracle-row"><span>Gateway HTTP</span><span id="oracle-gateway">⬜</span></div>
+                        <div class="oracle-row"><span>Services UP</span><span id="oracle-services">⬜</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var socket = io();
+        var PHASES = ['triage', 'planner', 'mitigation', 'verification', 'undo'];
+        var attemptCount = 0;
+
+        // ============================================================
+        // Service detail data — ALL paths go through /proxy/ on dashboard
+        // Browser → dashboard:8888/proxy/... → dashboard forwards → service
+        // ============================================================
+        var SVC_INFO = {
+            'api-gateway': {
+                title: '🌐 Nginx API Gateway (:80)',
+                desc: 'Reverse proxy — route requests tới 3 microservices. Là điểm vào duy nhất của hệ thống. Khi lỗi, toàn bộ traffic bị chặn.',
+                apis: [
+                    { method: 'GET', path: '/proxy/gateway/products', label: 'List products (via gateway)' },
+                    { method: 'GET', path: '/proxy/gateway/orders', label: 'List orders (via gateway)' },
+                    { method: 'GET', path: '/proxy/gateway/health', label: 'Gateway health' },
+                ]
+            },
+            'order-service': {
+                title: '📦 Order Service (:5001) — Orchestrator',
+                desc: 'Quản lý đơn hàng. Orchestration: gọi Product Service kiểm kho → Payment Service thanh toán → Reserve stock. Có OpenTelemetry traces.',
+                apis: [
+                    { method: 'GET', path: '/proxy/order-service/orders', label: 'List orders' },
+                    { method: 'GET', path: '/proxy/order-service/health', label: 'Health + deps' },
+                    { method: 'POST', path: '/proxy/order-service/orders', label: 'Create order',
+                      body: { product_id: 'P001', qty: 1, customer_name: 'Demo User' }},
+                ]
+            },
+            'product-service': {
+                title: '🏷️ Product Service (:5002)',
+                desc: 'Quản lý catalog sản phẩm & tồn kho. Cung cấp check-stock và reserve-stock cho Order Service.',
+                apis: [
+                    { method: 'GET', path: '/proxy/product-service/products', label: 'All products' },
+                    { method: 'GET', path: '/proxy/product-service/products/P001', label: 'Product P001' },
+                    { method: 'GET', path: '/proxy/product-service/products/P001/check-stock?qty=1', label: 'Check stock' },
+                    { method: 'GET', path: '/proxy/product-service/health', label: 'Health' },
+                ]
+            },
+            'payment-service': {
+                title: '💳 Payment Service (:5003)',
+                desc: 'Xử lý thanh toán. Hỗ trợ fault injection: SIMULATE_DELAY, SIMULATE_FAILURE qua env vars.',
+                apis: [
+                    { method: 'GET', path: '/proxy/payment-service/payments', label: 'List transactions' },
+                    { method: 'GET', path: '/proxy/payment-service/health', label: 'Health' },
+                ]
+            },
+        };
+
+        // Clock
+        setInterval(function() {
+            document.getElementById('clock').textContent = new Date().toLocaleTimeString('vi-VN');
+        }, 1000);
+
+        // === Service status ===
+        socket.on('service_status', function(data) {
+            data.services.forEach(function(svc) {
+                var box = document.getElementById('svc-' + svc.name);
+                var statusEl = document.getElementById('svc-' + svc.name + '-status');
+                if (!box || !statusEl) return;
+
+                box.classList.remove('healthy', 'unhealthy', 'down', 'pulse-red');
+                if (svc.status === 'healthy') {
+                    box.classList.add('healthy');
+                    statusEl.textContent = '🟢 Healthy';
+                    statusEl.style.color = '#22c55e';
+                } else if (svc.status === 'down') {
+                    box.classList.add('down', 'pulse-red');
+                    statusEl.textContent = '🔴 Down';
+                    statusEl.style.color = '#ef4444';
+                } else {
+                    box.classList.add('unhealthy');
+                    statusEl.textContent = '🟡 ' + svc.http_code;
+                    statusEl.style.color = '#eab308';
+                }
+            });
+        });
+
+        // === Agent workflow events ===
+        socket.on('agent_event', function(event) {
+            // Update pipeline phases
+            if (event.phase && PHASES.indexOf(event.phase) >= 0) {
+                var currentIdx = PHASES.indexOf(event.phase);
+                PHASES.forEach(function(p, i) {
+                    var el = document.getElementById('phase-' + p);
+                    el.classList.remove('active', 'done', 'error');
+                    if (i < currentIdx) el.classList.add('done');
+                    else if (i === currentIdx) el.classList.add('active');
+                });
+            }
+
+            // Add timeline event
+            var timeline = document.getElementById('timeline');
+            var placeholder = timeline.querySelector('.timeline-placeholder');
+            if (placeholder) timeline.innerHTML = '';
+
+            var eventType = event.type || 'action';
+            var actionText = event.action || event.message || '';
+
+            var div = document.createElement('div');
+            div.className = 'timeline-event te-' + eventType;
+            div.innerHTML =
+                '<div class="timeline-meta">' +
+                    '<span>' + (event.timestamp || '') + '</span>' +
+                    '<span class="timeline-tag">' + (event.agent || '') + '</span>' +
+                    (event.phase ? '<span class="timeline-tag">' + event.phase + '</span>' : '') +
+                '</div>' +
+                '<div class="timeline-action">' + actionText + '</div>';
+            timeline.appendChild(div);
+            document.getElementById('timeline-container').scrollTop = 999999;
+
+            updateSafetyPanels(event);
+        });
+
+        // === Safety panel updates ===
+        function updateSafetyPanels(event) {
+            var t = event.type;
+            var tnr = document.getElementById('tnr-status');
+
+            if (t === 'tnr_backup') {
+                tnr.textContent = 'BACKUP';
+                tnr.className = 'safety-badge badge-backup';
+                var stack = document.getElementById('undo-stack');
+                if (stack.querySelector('[style*="italic"]')) stack.innerHTML = '';
+                var item = document.createElement('div');
+                item.className = 'undo-item';
+                item.textContent = '📄 Backup #' + (++attemptCount) + ' @ ' + event.timestamp;
+                stack.prepend(item);
+            } else if (t === 'tnr_apply') {
+                tnr.textContent = 'APPLYING';
+                tnr.className = 'safety-badge badge-applying';
+                document.getElementById('risk-window').textContent = attemptCount + '/3';
+                var bar = document.getElementById('risk-bar');
+                bar.style.width = (attemptCount / 3 * 100) + '%';
+                if (attemptCount >= 3) bar.classList.add('danger');
+            } else if (t === 'tnr_commit') {
+                tnr.textContent = 'COMMITTED ✅';
+                tnr.className = 'safety-badge badge-committed';
+                document.getElementById('oracle-health').textContent = '✅';
+                document.getElementById('oracle-gateway').textContent = '✅';
+                document.getElementById('oracle-services').textContent = '✅';
+            } else if (t === 'tnr_rollback') {
+                tnr.textContent = 'ROLLBACK ❌';
+                tnr.className = 'safety-badge badge-rollback';
+                document.getElementById('oracle-health').textContent = '❌';
+            }
+
+            if (t === 'lock_acquired') {
+                document.getElementById('a-lock-status').textContent = '🔒 Locked';
+                document.getElementById('a-lock-holder').textContent = event.agent;
+            } else if (t === 'lock_released') {
+                document.getElementById('a-lock-status').textContent = '🔓 Free';
+                document.getElementById('a-lock-holder').textContent = 'No agent holding lock';
+            }
+
+            if (t === 'circuit_breaker') {
+                var bar2 = document.getElementById('risk-bar');
+                bar2.classList.add('danger');
+                bar2.style.width = '100%';
+            }
+        }
+
+        // === Service detail ===
+        function showDetail(svcName) {
+            var info = SVC_INFO[svcName];
+            if (!info) return;
+            document.getElementById('detail-title').textContent = info.title;
+            document.getElementById('detail-desc').textContent = info.desc;
+
+            var html = '';
+            info.apis.forEach(function(api, idx) {
+                html += '<div class="api-row">' +
+                    '<span class="api-method ' + api.method.toLowerCase() + '">' + api.method + '</span>' +
+                    '<span class="api-path">' + api.label + '</span>' +
+                    '<button class="btn-test-sm" onclick="callApi(\'' + svcName + '\',' + idx + ')">▶</button>' +
+                '</div>';
+            });
+            document.getElementById('detail-apis').innerHTML = html;
+            document.getElementById('api-result').style.display = 'none';
+        }
+
+        async function callApi(svcName, apiIdx) {
+            var info = SVC_INFO[svcName];
+            var api = info.apis[apiIdx];
+            var resultEl = document.getElementById('api-result');
+            resultEl.style.display = 'block';
+            resultEl.textContent = '⏳ ' + api.method + ' ' + api.path + '...';
+            resultEl.style.color = '#9ca3af';
+
+            try {
+                var opts = { method: api.method };
+                if (api.body) {
+                    opts.headers = { 'Content-Type': 'application/json' };
+                    opts.body = JSON.stringify(api.body);
+                }
+                var resp = await fetch(api.path, opts);
+                var data = await resp.json();
+                resultEl.textContent = resp.status + ' ' + resp.statusText + '\n' + JSON.stringify(data, null, 2);
+                resultEl.style.color = resp.ok ? '#22c55e' : '#ef4444';
+            } catch (e) {
+                resultEl.textContent = '❌ Error: ' + e.message;
+                resultEl.style.color = '#ef4444';
+            }
+        }
+
+        // === Test Order (header button) — goes through dashboard proxy ===
+        async function testCreateOrder() {
+            var resultEl = document.getElementById('api-result');
+            resultEl.style.display = 'block';
+            resultEl.textContent = '⏳ Creating test order via proxy...';
+            resultEl.style.color = '#9ca3af';
+
+            try {
+                var resp = await fetch('/proxy/gateway/orders', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        product_id: 'P00' + (Math.floor(Math.random() * 4) + 1),
+                        qty: 1,
+                        customer_name: 'Test-User-' + Math.floor(Math.random() * 100),
+                    }),
+                });
+                var data = await resp.json();
+                resultEl.textContent = '📦 ' + resp.status + '\n' + JSON.stringify(data, null, 2);
+                resultEl.style.color = resp.ok ? '#22c55e' : '#ef4444';
+                // Also show detail panel
+                showDetail('order-service');
+            } catch (e) {
+                resultEl.textContent = '❌ ' + e.message + '\n(Nginx Gateway có thể đang down)';
+                resultEl.style.color = '#ef4444';
+            }
+        }
+
+        // === Launch Agent ===
+        async function startAgent() {
+            document.getElementById('timeline').innerHTML = '';
+            PHASES.forEach(function(p) {
+                document.getElementById('phase-' + p).classList.remove('active', 'done', 'error');
+            });
+            document.getElementById('tnr-status').textContent = 'IDLE';
+            document.getElementById('tnr-status').className = 'safety-badge badge-idle';
+            document.getElementById('a-lock-status').textContent = '🔓 Free';
+            document.getElementById('a-lock-holder').textContent = 'No agent holding lock';
+            document.getElementById('risk-window').textContent = '0/3';
+            var bar = document.getElementById('risk-bar');
+            bar.style.width = '0%'; bar.classList.remove('danger');
+            document.getElementById('undo-stack').innerHTML = '<div class="safety-desc" style="font-style:italic">Empty</div>';
+            ['oracle-health', 'oracle-gateway', 'oracle-services'].forEach(function(id) {
+                document.getElementById(id).textContent = '⬜';
+            });
+            attemptCount = 0;
+
+            var btn = document.getElementById('btn-start');
+            btn.disabled = true;
+            btn.textContent = '⏳ Running...';
+
+            await fetch('/api/start-agent', { method: 'POST' });
+
+            setTimeout(function() {
+                btn.disabled = false;
+                btn.textContent = '🚀 Launch SRE Agent';
+            }, 120000);
+        }
+
+        // Re-enable button when done
+        socket.on('agent_event', function(event) {
+            if (event.phase === 'done' || event.type === 'circuit_breaker') {
+                var btn = document.getElementById('btn-start');
+                btn.disabled = false;
+                btn.textContent = '🚀 Launch SRE Agent';
+            }
+        });
+
+        // Load previous logs on connect
+        socket.on('agent_logs_init', function(data) {
+            if (data.logs && data.logs.length > 0) {
+                var timeline = document.getElementById('timeline');
+                var placeholder = timeline.querySelector('.timeline-placeholder');
+                if (placeholder) timeline.innerHTML = '';
+                data.logs.forEach(function(entry) {
+                    var eventType = entry.type || 'action';
+                    var actionText = entry.action || entry.message || '';
+                    var div = document.createElement('div');
+                    div.className = 'timeline-event te-' + eventType;
+                    div.innerHTML =
+                        '<div class="timeline-meta">' +
+                            '<span>' + (entry.timestamp || '') + '</span>' +
+                            '<span class="timeline-tag">' + (entry.agent || '') + '</span>' +
+                            (entry.phase ? '<span class="timeline-tag">' + entry.phase + '</span>' : '') +
+                        '</div>' +
+                        '<div class="timeline-action">' + actionText + '</div>';
+                    timeline.appendChild(div);
+                });
+                document.getElementById('timeline-container').scrollTop = 999999;
+            }
+        });
+    </script>
+</body>
+</html>
